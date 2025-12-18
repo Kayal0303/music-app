@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Player</title>
+<style>
+  body { font-family: Arial; margin: 0; padding: 20px; background: #f9f9f9; }
+  .container { max-width: 600px; margin: auto; }
+  h2 { text-align: center; }
+  input { padding: 8px; margin: 4px 0; width: 100%; box-sizing: border-box; }
+  button { padding: 10px 16px; margin: 4px 0; cursor: pointer; background: #1e90ff; color: white; border: none; border-radius: 6px; }
+  button.small { background: #eee; color: black; margin-right: 4px; }
+  ul { list-style: none; padding: 0; max-height: 200px; overflow-y: auto; }
+  li { padding: 8px; border-bottom: 1px solid #ddd; cursor: pointer; }
+  li:hover { background: #eee; }
+  .flex { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <!-- Login -->
+  <div id="login-screen">
+    <h2>Music Player Login / Register</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button id="login-btn">Login / Register</button>
+  </div>
+
+  <!-- Player -->
+  <div id="player-screen" style="display:none;">
+    <h2>Hello, <span id="user-display"></span></h2>
+    <div class="flex">
+      <button class="small" id="pick-local">Pick Local File</button>
+      <button class="small" id="settings-btn">Settings</button>
+      <button class="small" id="logout-btn">Logout</button>
+    </div>
+
+    <div style="margin-top:10px;">
+      <input type="text" id="search-query" placeholder="Search artist or song">
+      <button id="search-btn">Search Online</button>
+    </div>
+
+    <h3>Online Results</h3>
+    <ul id="online-list"></ul>
+
+    <h3>Local Songs</h3>
+    <ul id="local-list"></ul>
+
+    <div style="margin-top:10px;">
+      <p>Current: <span id="current-track">None</span></p>
+      <button id="play-btn">Play</button>
+      <button id="pause-btn">Pause</button>
+      <button id="stop-btn">Stop</button>
+      <audio id="audio-player" controls style="width:100%; display:none;"></audio>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings-screen" style="display:none;">
+    <h2>Settings</h2>
+    <input type="text" id="new-username" placeholder="New Username">
+    <input type="password" id="new-password" placeholder="New Password">
+    <button id="change-btn">Change Username/Password</button>
+    <button id="back-btn">Back</button>
+  </div>
+</div>
+
+<script>
+const loginScreen = document.getElementById('login-screen');
+const playerScreen = document.getElementById('player-screen');
+const settingsScreen = document.getElementById('settings-screen');
+
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const loginBtn = document.getElementById('login-btn');
+
+const userDisplay = document.getElementById('user-display');
+const logoutBtn = document.getElementById('logout-btn');
+const settingsBtn = document.getElementById('settings-btn');
+const backBtn = document.getElementById('back-btn');
+
+const newUsername = document.getElementById('new-username');
+const newPassword = document.getElementById('new-password');
+const changeBtn = document.getElementById('change-btn');
+
+const pickLocal = document.getElementById('pick-local');
+const searchBtn = document.getElementById('search-btn');
+const searchQuery = document.getElementById('search-query');
+
+const onlineList = document.getElementById('online-list');
+const localList = document.getElementById('local-list');
+
+const currentTrackDisplay = document.getElementById('current-track');
+const playBtn = document.getElementById('play-btn');
+const pauseBtn = document.getElementById('pause-btn');
+const stopBtn = document.getElementById('stop-btn');
+const audioPlayer = document.getElementById('audio-player');
+
+let loggedInUser = localStorage.getItem('user') || null;
+let currentTrack = null;
+let localSongs = [];
+
+// --- Login ---
+function showScreen(screen) {
+  loginScreen.style.display = screen==='login'?'block':'none';
+  playerScreen.style.display = screen==='player'?'block':'none';
+  settingsScreen.style.display = screen==='settings'?'block':'none';
+}
+
+function login() {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value.trim();
+  if(!username || !password){ alert('Enter username/password'); return; }
+
+  let stored = localStorage.getItem('credentials:'+username);
+  if(stored){
+    stored = JSON.parse(stored);
+    if(stored.password === password){
+      loggedInUser = username;
+      localStorage.setItem('user', username);
+      startPlayer();
+    } else { alert('Invalid password'); }
+  } else {
+    // Register
+    localStorage.setItem('credentials:'+username, JSON.stringify({password}));
+    localStorage.setItem('user', username);
+    loggedInUser = username;
+    startPlayer();
+  }
+}
+
+function logout() {
+  loggedInUser = null;
+  localStorage.removeItem('user');
+  audioPlayer.pause();
+  audioPlayer.src = '';
+  currentTrack = null;
+  showScreen('login');
+}
+
+loginBtn.addEventListener('click', login);
+
+// --- Player ---
+function startPlayer(){
+  userDisplay.textContent = loggedInUser;
+  showScreen('player');
+}
+
+// --- Settings ---
+settingsBtn.addEventListener('click',()=>{ newUsername.value=loggedInUser; showScreen('settings'); });
+backBtn.addEventListener('click',()=>showScreen('player'));
+changeBtn.addEventListener('click',()=>{
+  const nu = newUsername.value.trim();
+  const np = newPassword.value.trim();
+  if(!nu || !np){ alert('Enter new username/password'); return; }
+  let oldCred = localStorage.getItem('credentials:'+loggedInUser);
+  if(oldCred){
+    localStorage.removeItem('credentials:'+loggedInUser);
+    localStorage.setItem('credentials:'+nu, JSON.stringify({password:np}));
+    localStorage.setItem('user', nu);
+    loggedInUser = nu;
+    alert('Username/password changed');
+  }
+});
+
+// --- Local File ---
+pickLocal.addEventListener('click',()=>{
+  const input = document.createElement('input');
+  input.type='file';
+  input.accept='audio/*';
+  input.onchange = e=>{
+    const file = e.target.files[0];
+    if(file){
+      const url = URL.createObjectURL(file);
+      localSongs.push({title:file.name, uri:url});
+      renderLocal();
+    }
+  };
+  input.click();
+});
+
+function renderLocal(){
+  localList.innerHTML='';
+  localSongs.forEach((song,i)=>{
+    const li = document.createElement('li');
+    li.textContent = song.title;
+    li.onclick = ()=>playTrack(song);
+    localList.appendChild(li);
+  });
+}
+
+// --- Online Search ---
+searchBtn.addEventListener('click', async ()=>{
+  const q = searchQuery.value.trim();
+  if(!q) return;
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&limit=25`;
+  try{
+    const res = await fetch(url);
+    const data = await res.json();
+    renderOnline(data.results.filter(x=>x.previewUrl));
+  }catch(e){ alert('Search failed'); }
+});
+
+function renderOnline(results){
+  onlineList.innerHTML='';
+  results.forEach(item=>{
+    const li = document.createElement('li');
+    li.textContent = `${item.trackName} — ${item.artistName}`;
+    li.onclick = ()=>playTrack({title:item.trackName, uri:item.previewUrl});
+    onlineList.appendChild(li);
+  });
+}
+
+// --- Player controls ---
+function playTrack(track){
+  currentTrack = track;
+  currentTrackDisplay.textContent = track.title;
+  audioPlayer.src = track.uri;
+  audioPlayer.play();
+}
+
+playBtn.addEventListener('click',()=>{ if(audioPlayer.src) audioPlayer.play(); });
+pauseBtn.addEventListener('click',()=>{ if(audioPlayer.src) audioPlayer.pause(); });
+stopBtn.addEventListener('click',()=>{ audioPlayer.pause(); audioPlayer.src=''; currentTrackDisplay.textContent='None'; });
+
+if(loggedInUser) startPlayer();
+else showScreen('login');
+</script>
+</body>
+</html>
